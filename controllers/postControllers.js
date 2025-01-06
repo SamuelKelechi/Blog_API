@@ -122,22 +122,23 @@ const editPost = async (req, res, next) => {
         if(!title || !category || !description || !story) {
             return next(new HttpError("Fill all fields", 422))
         }
-        if(!req.files) {
-            updatedPost = await Post.findByIdAndUpdate(postId, {title, category, description, story}, {new: true})
-        } else {
             // get old post from database
             const oldPost = await Post.findById(postId);
-            // delete old avatar from upload
-            fs.unlink(path.join(__dirname, '..', 'uploads', oldPost.avatar), async (err) => {
-                if(err) {
-                    return next(new HttpError(err));
-                    }
-                })
+            if(req.user.id == oldPost.creator) {
+                if(!req.files) {
+                    updatedPost = await Post.findByIdAndUpdate(postId, {title, category, description, story}, {new: true})
+                } else {
+                     // delete old avatar from upload
+                fs.unlink(path.join(__dirname, '..', 'uploads', oldPost.avatar), async (err) => {
+                    if(err) {
+                        return next(new HttpError(err));
+                        }
+                    })
                 // upload new avatar
                 const {avatar} = req.files;
                 // check file size
                 if(avatar.size > 5000000) {
-                    return next(new HttpError("Image size should not exceed 5MB", 422))
+                    return next(new HttpError("Image size should not exceed 5MB"))
                 }
                 fileName = avatar.name;
                 let splittedFilename = fileName.split('.')
@@ -149,9 +150,9 @@ const editPost = async (req, res, next) => {
                 })
                 updatedPost = await Post.findByIdAndUpdate(postId, {title, category, description, story, avatar: newFilename}, {new: true})
             }
-
+        }
             if(!updatedPost) {
-                return next(new HttpError("Post could not be updated", 422))
+                return next(new HttpError("Post could not be updated", 400))
             }
 
             res.status(200).json(updatedPost)
@@ -172,6 +173,7 @@ const deletePost = async (req, res, next) => {
         }
         const post = await Post.findById(postId);
         const fileName = post?.avatar;
+        if(req.user.id == post.creator) {
         // delete avatar from upload folder
         fs.unlink(path.join(__dirname, '..', 'uploads', fileName), async (err) => {
             if(err) {
@@ -182,10 +184,13 @@ const deletePost = async (req, res, next) => {
                 const currentUser = await User.findById(req.user.id);
                 const userPostCount = currentUser?.posts - 1;
                 await User.findByIdAndUpdate(req.user.id, {posts: userPostCount})
+                res.json(`Post ${postId} deleted successfully`)
             }
         })
-
-        res.json(`Post ${postId} deleted successfully`)
+    } else {
+        return next(new HttpError("Post Coult not be deleted", 403))
+    }
+       
     } catch (error) {
         
     }
